@@ -1,0 +1,19 @@
+### Register a User
+POST http://127.0.0.1:5000/auth/register
+Content-Type: application/json
+
+{
+    "email": "employer012@company.com",
+    "password": "securepassword123",
+    "role": "employer",
+    "company_name": "Tech Corp"
+}
+
+### Login
+POST http://127.0.0.1:5000/auth/login
+Content-Type: application/json
+
+{
+    "email": "employer@company.com",
+    "password": "securepassword"
+}
