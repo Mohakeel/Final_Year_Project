@@ -1,4 +1,5 @@
 from flask import Flask
+import os
 from config import Config
 from models.models import db
 from flask_jwt_extended import JWTManager
@@ -15,7 +16,16 @@ def create_app():
     CORS(app) # 2. Enable CORS for all routes
     
     db.init_app(app)
-    JWTManager(app)
+    jwt = JWTManager(app)
+
+    @jwt.token_in_blocklist_loader
+    def check_if_token_revoked(jwt_header, jwt_payload):
+        """Called whenever a protected endpoint is accessed to check if token is revoked."""
+        jti = jwt_payload.get('jti')
+        if not jti:
+            return True
+        from models.models import TokenBlocklist
+        return TokenBlocklist.query.filter_by(jti=jti).first() is not None
 
     # Blueprints
     app.register_blueprint(auth_bp, url_prefix='/auth')
@@ -24,6 +34,13 @@ def create_app():
     app.register_blueprint(applicant_bp, url_prefix='/applicant')
 
     with app.app_context():
+        # ensure the directory for the sqlite file exists
+        uri = app.config.get('SQLALCHEMY_DATABASE_URI', '')
+        if uri.startswith('sqlite:///'):
+            db_path = uri.replace('sqlite:///', '')
+            db_dir = os.path.dirname(db_path)
+            if db_dir and not os.path.exists(db_dir):
+                os.makedirs(db_dir, exist_ok=True)
         db.create_all()
     
     return app

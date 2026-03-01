@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask_jwt_extended import create_access_token
-from models.models import db, User, Applicant, Employer, University
+from flask_jwt_extended import create_access_token, jwt_required, get_jwt
+from models.models import db, User, Applicant, Employer, University, TokenBlocklist
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -31,6 +31,7 @@ def register():
     db.session.commit()
 
     # 4. GENERATE TOKEN so the frontend can log them in immediately
+    # JWT spec requires 'sub' (identity) to be a string
     token = create_access_token(identity=str(user.id), additional_claims={"role": user.role})
     
     return jsonify({
@@ -48,3 +49,22 @@ def login():
         token = create_access_token(identity=str(user.id), additional_claims={"role": user.role})
         return jsonify(access_token=token, role=user.role), 200
     return jsonify({"msg": "Bad credentials"}), 401
+
+
+@auth_bp.route('/logout', methods=['POST'])
+@jwt_required()
+def logout():
+    """Revoke the current JWT by adding its JTI to the blocklist."""
+    jti = get_jwt().get('jti')
+    if not jti:
+        return jsonify({"msg": "Invalid token"}), 400
+
+    # Persist revoked token
+    try:
+        db.session.add(TokenBlocklist(jti=jti))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        return jsonify({"msg": "Failed to revoke token"}), 500
+
+    return jsonify({"msg": "Successfully logged out"}), 200
